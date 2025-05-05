@@ -4,7 +4,7 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #1e2939;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -23,5 +23,41 @@
 }
 
 .custom-bg {
-  background-color: #222e41;
+  /* background-color: #222e41; */
+}
+
+
+
+
+/* src/components/VideoBackground.css */
+.video-container {
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  z-index: 999;
+}
+
+.video-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  min-width: 100%;
+  min-height: 100%;
+  width: auto;
+  height: auto;
+  transform: translate(-50%, -50%);
+  z-index: -1;
+  object-fit: cover;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  color: white;
+  /* border: 2px solid red; */
+}
+
+
+.khadhroui {
+  background-image: linear-gradient(to right, #222e41fb, #222e41e5);
 }
