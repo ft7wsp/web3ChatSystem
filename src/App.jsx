@@ -31,12 +31,10 @@ export default function App() {
   };
 
   const playBg = () => {
-    console.log(vidRef.current.muted);
     vidRef.current.muted = false
     setTimeout(() => {
       vidRef.current.muted = true
-    }, 8000);
-    console.log(vidRef.current.muted);
+    }, 7000);
     
   }
 
