@@ -1,252 +1,222 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import "./App.css";
 import metamaskSVG from "./assets/MetaMask_Fox.svg";
 import { ethers } from "ethers";
 import ABI from "./ABI.json";
 import { gsap } from "gsap";
 import { Draggable } from "gsap/all";
-import { SocketBlockSubscriber } from "ethers";
 
 gsap.registerPlugin(Draggable);
 
-const addressToContract = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Ensure this is correct for your network
+const addressToContract = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 export default function App() {
   const [provider, setProvider] = useState(null);
-  const [signer, setSigner] = useState(null);
   const [contract, setContract] = useState(null);
-
+  const [account, setAccount] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const foxRef = useRef(null);
   const bottomRef = useRef(null);
-  const btnSendRef = useRef(null);
-  const vidRef = useRef(null);
-  const allRef = useRef(null);
 
-  // Scroll to bottom helper
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, []);
 
-  const playBg = () => {
-    vidRef.current.muted = false
-    setTimeout(() => {
-      vidRef.current.muted = true
-    }, 7000);
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      alert("MetaMask is required!");
+      return;
+    }
     
-  }
+    if (isConnecting) return;
+    setIsConnecting(true);
 
-  // Fetch messages function
-  const getMessages = async () => {
-    playBg()
     try {
-      const msgs = await contract.getMsgs();
+      const _provider = new ethers.BrowserProvider(window.ethereum);
+      // Check if already connected first
+      const accounts = await _provider.send("eth_accounts", []);
+      let activeAccount = accounts[0];
+
+      if (!activeAccount) {
+        const requestedAccounts = await _provider.send("eth_requestAccounts", []);
+        activeAccount = requestedAccounts[0];
+      }
+
+      const _signer = await _provider.getSigner();
+      const _contract = new ethers.Contract(addressToContract, ABI, _signer);
+
+      setProvider(_provider);
+      setContract(_contract);
+      setAccount(activeAccount);
+
+      const msgs = await _contract.getMsgs();
       setMessages(msgs);
+
+      // Listener for real-time updates
+      _contract.on("msgSent", async () => {
+        const updatedMsgs = await _contract.getMsgs();
+        setMessages(updatedMsgs);
+      });
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Connection error:", error);
+      if (error.code === -32002) {
+        alert("A connection request is already pending in MetaMask. Please open your extension.");
+      }
+    } finally {
+      setIsConnecting(false);
     }
   };
 
-  // Send message
   const sendMessage = async () => {
-    playBg()
-
-
-    if (!input.trim()) return;
-
-    
-
+    if (!input.trim() || !contract || isLoading) return;
+    setIsLoading(true);
 
     try {
       const tx = await contract.sendMsg(input);
       await tx.wait();
-      await getMessages();
-      requestAnimationFrame(() => scrollToBottom());
       setInput("");
     } catch (error) {
       console.error("Error sending message:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const init = async () => {
-      if (!window.ethereum) {
-        alert("MetaMask is required!");
-        return;
-      }
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom]);
 
-      try {
-        const _provider = new ethers.BrowserProvider(window.ethereum);
-        const _signer = await _provider.getSigner();
-        const _contract = new ethers.Contract(addressToContract, ABI, _signer);
-
-        setProvider(_provider);
-        setSigner(_signer);
-        setContract(_contract);
-
-        const msgs = await _contract.getMsgs();
-        setMessages(msgs);
-
-        _contract.on("msgSent", async () => {
-          const updatedMsgs = await _contract.getMsgs();
-          setMessages(updatedMsgs);
-          scrollToBottom();
-        });
-      } catch (error) {
-        console.error("Initialization error:", error);
-      }
-    };
-
-    init();
-
-
-    // gsap.set(foxRef.current, {
-    //   transformOrigin: "50% 50%",
-    // });
-    // GSAP Animation setup once refs exist
-      const fox = foxRef.current;
-
-
-      
-      gsap.to(fox, {
-        duration: 2,
-        x: "-75vw",
-        rotation: 720,
-        ease: "power2.out",
-        delay: 0.6,
-        onComplete: () => {
-          // Infinite rotation
-          gsap.to(fox, {
-            rotation: "+=360",
-            duration: 2,
-            repeat: 1,
-            ease: "linear",
-            transformOrigin: "50% 50%",
-            onComplete: () => {
-              gsap.to(fox, {
-                duration: 2,
-                x: "-40vw",
-                rotation: 720,
-                ease: "power2.out",
-                onComplete: () => {
-                  gsap.to(fox, {
-                    rotation: "+=360",
-                    duration: 2,
-                    repeat: -1,
-                    ease: "linear",
-                  })
-                }
-              })
-            }
-          });
-        },
-      })
-
+  useEffect(() => {
+    const fox = foxRef.current;
     
+    // Performance: Use simple, non-repeating animations by default
+    // Only animate on initial load or interaction
+    gsap.fromTo(fox, 
+      { scale: 0, opacity: 0 },
+      { scale: 1, opacity: 1, duration: 0.8, ease: "power2.out" }
+    );
 
-        Draggable.create(foxRef.current, {
-          type: "x",
-          bounds: ".container",
-          // edgeResistance: 0.85,
-          inertia: true,
-        });
-
-
-
-          setTimeout(() => {
-            console.log("inside the scroll timeout");
-            
-            scrollToBottom()
-          }, 600);
-
-         
-       
-      }, [input]);
+    Draggable.create(fox, {
+      type: "x,y",
+      bounds: window,
+      inertia: true,
+      onDragStart: () => gsap.to(fox, { scale: 1.1, duration: 0.2 }),
+      onDragEnd: () => gsap.to(fox, { scale: 1, duration: 0.2 })
+    });
+  }, []);
 
   return (
-    <div style={{ position: "relative", height: "100vh" }} className="khadhroui font-mono" ref={allRef}>
-      {/* Video Background */}
-      <video
-        ref={vidRef}
-        autoPlay
-        muted
-        loop
-        controls
-        playsInline
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          transform: "translate(-50%, -50%)",
-          zIndex: -1,
-        }}
-      >
-        <source src="/bg.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
+    <div className="relative h-screen overflow-hidden font-sans text-gray-100 bg-gray-950">
+      {/* Optimized Background: Lower opacity and will-change for GPU acceleration */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="object-cover w-full h-full opacity-20 will-change-transform"
+          style={{ filter: 'blur(5px)' }}
+        >
+          <source src="/bg.mp4" type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-950/80 via-transparent to-gray-950/95"></div>
+      </div>
 
-      {/* Main Content */}
-      <div style={{ position: "relative", zIndex: 1, color: "white" }} className="content">
-        <div className="flex flex-col h-screen">
-          {/* Header */}
-          <div className="p-4 border-b border-gray-400 font-bold text-lg custom-bg flex items-center justify-between relative text-gray-200">
-
-            <div className="">          
-                Chat with web3 100% secure chat
-            </div>
-            <div className="container relative w-[75dvw]">
-              <img
-                ref={foxRef}
-                id="fox"
-                src={metamaskSVG}
-                alt="MetaMask Fox"
-                className="w-10 h-10 absolute left-[86%] cursor-pointer hover:w-12 hover:h-12 "
-              />
-            </div>
+      <div className="relative z-10 flex flex-col h-full max-w-4xl mx-auto shadow-2xl border-x border-white/5 backdrop-blur-md bg-black/20">
+        <header className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5">
+          <div className="flex items-center space-x-3">
+            <div className={`w-3 h-3 rounded-full ${account ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <h1 className="text-xl font-bold tracking-tight text-white/90">Web3 Messenger</h1>
           </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 mt-8 ml-11 text-gray-300 overflow-hidden space-nowrap">
-            {messages.length > 0 ? (
-              messages.map((msg, i) => (
-                <li key={i} className="list-none font-medium">
-                  <strong>From:</strong> {msg.from}
-                  <br />
-                  <strong>Message:</strong> {msg.amsg}
-                </li>
-              ))
+          
+          <div className="flex items-center space-x-4">
+            {account ? (
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Connected</span>
+                <span className="text-sm font-mono text-blue-400">
+                  {account.slice(0, 6)}...{account.slice(-4)}
+                </span>
+              </div>
             ) : (
-              <p>No messages yet.</p>
+              <button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                className="px-4 py-2 text-sm font-bold text-white transition-all bg-blue-600 rounded-lg hover:bg-blue-500 active:scale-95 disabled:opacity-50"
+              >
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
+              </button>
             )}
-            <div ref={bottomRef}></div>
+            <img
+              ref={foxRef}
+              src={metamaskSVG}
+              alt="MetaMask"
+              className="w-10 h-10 cursor-grab active:cursor-grabbing select-none"
+            />
           </div>
+        </header>
 
-          {/* Input Section */}
-          <div className="border-t border-gray-700 p-2 flex">
+        <main className="flex-1 p-6 overflow-y-auto custom-scrollbar space-y-4">
+          {messages.length > 0 ? (
+            messages.map((msg, i) => {
+              const isMe = account && msg.from.toLowerCase() === account.toLowerCase();
+              return (
+                <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"} transition-all duration-300`}>
+                  <div className={`max-w-[80%] rounded-2xl p-4 ${
+                    isMe 
+                      ? "bg-blue-600 text-white rounded-tr-none shadow-lg shadow-blue-900/20" 
+                      : "bg-gray-800/80 text-gray-200 rounded-tl-none border border-white/10"
+                  }`}>
+                    {!isMe && (
+                      <div className="mb-1 text-[10px] font-bold text-blue-400 uppercase tracking-tight">
+                        {msg.from.slice(0, 10)}...
+                      </div>
+                    )}
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.amsg}</p>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-gray-500 opacity-50">
+              <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              <p className="text-center font-medium">No decentralized messages yet.</p>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </main>
+
+        <footer className="p-4 bg-white/5 border-t border-white/10">
+          <div className="flex space-x-3">
             <input
-              ref={btnSendRef}
               type="text"
-              className="w-4/5 border rounded bg-transparent border-gray-700 focus:outline-none text-red px-3 py-2 hover:p-2 transition-padding duration-300"
-              placeholder="Type your message..."
+              disabled={!account || isLoading}
+              className="flex-1 px-4 py-3 text-white bg-black/40 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all disabled:opacity-30"
+              placeholder={account ? "Write a message..." : "Please connect wallet"}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") sendMessage();
-              }}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             />
             <button
               onClick={sendMessage}
-              className="w-1/5 bg-gray-900 text-gray-100 rounded ml-2 px-3 py-2 hover:scale-104 active:scale-95"
+              disabled={!account || !input.trim() || isLoading}
+              className="px-6 py-3 font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-500 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center min-w-[100px]"
             >
-              Send
+              {isLoading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                "Send"
+              )}
             </button>
           </div>
-        </div>
+        </footer>
       </div>
     </div>
   );
